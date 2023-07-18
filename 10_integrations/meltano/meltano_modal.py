@@ -21,7 +21,7 @@ meltano_source_mount = modal.Mount.from_local_dir(
     condition=lambda path: not any(p.startswith(".") for p in Path(path).parts),
 )
 
-storage = modal.SharedVolume().persist("meltano_volume")
+storage = modal.NetworkFileSystem.persisted("meltano_volume")
 
 meltano_conf = modal.Secret.from_dict(
     {
@@ -46,7 +46,7 @@ meltano_img = (
     modal.Image.debian_slim()
     .apt_install("git")
     .pip_install("meltano")
-    .copy(meltano_source_mount)
+    .copy_mount(meltano_source_mount)
     .run_function(install_project_deps, secret=meltano_conf)
 )
 
@@ -68,7 +68,7 @@ def symlink_logs():
 
 # Run this example using `modal run meltano_modal.py::extract_and_load`
 @stub.function(
-    shared_volumes={PERSISTED_VOLUME_PATH: storage},
+    network_file_systems={PERSISTED_VOLUME_PATH: storage},
     schedule=modal.Period(days=1),
 )
 def extract_and_load():
@@ -81,7 +81,7 @@ def extract_and_load():
 # Interactive sqlite3 exploration using `modal run meltano_modal.py::explore`
 @stub.function(
     interactive=True,
-    shared_volumes={PERSISTED_VOLUME_PATH: storage},
+    network_file_systems={PERSISTED_VOLUME_PATH: storage},
     timeout=86400,
     image=modal.Image.debian_slim().apt_install("sqlite3"),
     secrets=[meltano_conf],

@@ -11,16 +11,17 @@ import sys
 import urllib.request
 
 from . import config
-from .main import stub, volume
+from .config import stub, volume
 from .pokemon_naming import (
     fetch_pokemon_names,
     generate_names,
     rnn_image,
     train_rnn,
+    rnn_names_output_path,
 )
 
 
-@stub.function(shared_volumes={config.CACHE_DIR: volume})
+@stub.function(network_file_systems={config.CACHE_DIR: volume})
 def reset_diskcache(dry_run=True) -> None:
     """
     Delete all Pokémon character samples and cards from disk cache.
@@ -94,7 +95,7 @@ def extract_colors(num=3) -> None:
 
 @stub.function(
     image=rnn_image,
-    shared_volumes={config.CACHE_DIR: volume},
+    network_file_systems={config.CACHE_DIR: volume},
     timeout=15 * 60,
 )
 def generate_pokemon_names():
@@ -128,7 +129,7 @@ def generate_pokemon_names():
     print(
         f"Storing {desired_generations} generated names. eg. '{new_names[0]}'"
     )
-    output_path = config.POKEMON_NAMES / "rnn.txt"
+    output_path = rnn_names_output_path
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n".join(new_names))
 

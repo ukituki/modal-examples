@@ -1,5 +1,6 @@
 # ---
 # args: ["--just-run"]
+# runtimes: ["runc", "gvisor"]
 # ---
 # # Tensorflow tutorial
 #
@@ -19,7 +20,7 @@
 
 import time
 
-from modal import Image, SharedVolume, Stub, wsgi_app
+from modal import Image, NetworkFileSystem, Stub, wsgi_app
 
 dockerhub_image = Image.from_dockerhub(
     "tensorflow/tensorflow:latest-gpu",
@@ -46,7 +47,7 @@ stub = Stub(
 # We want to run the web server for Tensorboard at the same time as we are training the Tensorflow model.
 # The easiest way to do this is to set up a shared filesystem between the training and the web server.
 
-stub.volume = SharedVolume()
+stub.volume = NetworkFileSystem.new()
 logdir = "/tensorboard"
 
 # ## Training function
@@ -60,7 +61,7 @@ logdir = "/tensorboard"
 #   This makes it a bit easier to run this example even if you don't have Tensorflow installed on you local computer.
 
 
-@stub.function(shared_volumes={logdir: stub.volume}, gpu="any")
+@stub.function(network_file_systems={logdir: stub.volume}, gpu="any")
 def train():
     import pathlib
 
@@ -152,7 +153,7 @@ def train():
 # Note that this server will be exposed to the public internet!
 
 
-@stub.function(shared_volumes={logdir: stub.volume})
+@stub.function(network_file_systems={logdir: stub.volume})
 @wsgi_app()
 def tensorboard_app():
     import tensorboard

@@ -1,6 +1,7 @@
 # ---
 # output-directory: "/tmp/stable-diffusion"
 # args: ["--prompt", "An 1600s oil painting of the New York City skyline"]
+# runtimes: ["runc", "gvisor"]
 # ---
 # # Stable Diffusion CLI
 #
@@ -87,12 +88,14 @@ image = (
         "accelerate",
         "diffusers[torch]>=0.15.1",
         "ftfy",
-        "torch",
         "torchvision",
         "transformers~=4.25.1",
         "triton",
         "safetensors",
-        "torch>=2.0",
+    )
+    .pip_install(
+        "torch==2.0.1+cu117",
+        find_links="https://download.pytorch.org/whl/torch_stable.html",
     )
     .pip_install("xformers", pre=True)
     .run_function(

@@ -1,6 +1,7 @@
 # ---
 # deploy: true
 # output-directory: "/tmp"
+# runtimes: ["runc", "gvisor"]
 # ---
 # # Face detection on YouTube videos
 #
@@ -59,7 +60,7 @@ if stub.is_inside():
 
 # For temporary storage of movie clips, we use a "shared volume"
 
-stub.sv = modal.SharedVolume()
+stub.sv = modal.NetworkFileSystem.new()
 
 # ### Face detection function
 #
@@ -73,7 +74,7 @@ stub.sv = modal.SharedVolume()
 # and stores the resulting video back to the shared storage.
 
 
-@stub.function(shared_volumes={"/clips": stub.sv}, timeout=600)
+@stub.function(network_file_systems={"/clips": stub.sv}, timeout=600)
 def detect_faces(fn, start, stop):
     # Extract the subclip from the video
     clip = moviepy.editor.VideoFileClip(fn).subclip(start, stop)
@@ -106,7 +107,7 @@ def detect_faces(fn, start, stop):
 # 3. Stitch the results back into a new video
 
 
-@stub.function(shared_volumes={"/clips": stub.sv}, retries=1)
+@stub.function(network_file_systems={"/clips": stub.sv}, retries=1)
 def process_video(url):
     print(f"Downloading video from '{url}'")
     yt = pytube.YouTube(url)
