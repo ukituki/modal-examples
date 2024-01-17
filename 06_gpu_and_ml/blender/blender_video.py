@@ -66,10 +66,9 @@ stub = modal.Stub(
 #
 # We need various global configuration that we want to happen inside the containers (but not locally), such as
 # enabling the GPU device.
-# To do this, we use the `stub.is_inside()` conditional, which will evaluate to `False` when the script runs
-# locally, but to `True` when imported in the cloud.
+# To do this, we use the `stub.image.run.inside()` context manager.
 
-if stub.is_inside():
+with stub.image.imports():
     import bpy
 
     # NOTE: Blender segfaults if you try to do this after the other imports.
@@ -109,7 +108,7 @@ if stub.is_inside():
 # Note the `gpu="any"` argument which tells Modal to use GPU workers.
 
 
-@stub.function(gpu="any")
+@stub.function(gpu="t4")
 def render_frame(i):
     print(f"Using frame {i}")
 

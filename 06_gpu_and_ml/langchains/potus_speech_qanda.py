@@ -99,8 +99,8 @@ def retrieve_sources(sources_refs: str, texts: list[str]) -> list[str]:
 
 def qanda_langchain(query: str) -> tuple[str, list[str]]:
     from langchain.chains.qa_with_sources import load_qa_with_sources_chain
-    from langchain.llms import OpenAI
     from langchain.embeddings.openai import OpenAIEmbeddings
+    from langchain.llms import OpenAI
     from langchain.text_splitter import CharacterTextSplitter
     from langchain.vectorstores.faiss import FAISS
 
@@ -145,7 +145,8 @@ def qanda_langchain(query: str) -> tuple[str, list[str]]:
     docs = docsearch.similarity_search(query)
 
     chain = load_qa_with_sources_chain(
-        OpenAI(temperature=0), chain_type="stuff"
+        OpenAI(model_name="gpt-3.5-turbo-instruct", temperature=0),
+        chain_type="stuff",
     )
     print("running query against Q&A chain.\n")
     result = chain(

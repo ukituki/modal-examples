@@ -21,7 +21,8 @@
 
 from pathlib import Path
 
-from modal import Image, NetworkFileSystem, Stub, method, wsgi_app
+import modal
+from modal import Image, Stub, Volume, method, wsgi_app
 
 VOL_MOUNT_PATH = Path("/vol")
 
@@ -37,7 +38,31 @@ image = Image.debian_slim().pip_install(
 )
 
 stub = Stub(name="example-news-summarizer", image=image)
-output_vol = NetworkFileSystem.persisted("finetune-vol")
+output_vol = Volume.persisted("finetune-volume")
+
+# ### Handling preemption
+#
+# As this finetuning job is long-running it's possible that it experiences a preemption.
+# The training code is robust to pre-emption events by periodically saving checkpoints and restoring
+# from checkpoint on restart. But it's also helpful to observe in logs when a preemption restart has occurred,
+# so we track restarts with a `modal.Dict`.
+#
+# See the [guide on preemptions](/docs/guide/preemption#preemption) for more details on preemption handling.
+
+stub.restart_tracker_dict = modal.Dict.new()
+
+
+def track_restarts(restart_tracker: modal.Dict) -> int:
+    if not restart_tracker.contains("count"):
+        preemption_count = 0
+        print(f"Starting first time. {preemption_count=}")
+        restart_tracker["count"] = preemption_count
+    else:
+        preemption_count = restart_tracker.get("count") + 1
+        print(f"Restarting after pre-emption. {preemption_count=}")
+        restart_tracker["count"] = preemption_count
+    return preemption_count
+
 
 # ## Finetuning Flan-T5 on XSum dataset
 #
@@ -47,7 +72,8 @@ output_vol = NetworkFileSystem.persisted("finetune-vol")
 @stub.function(
     gpu="A10g",
     timeout=7200,
-    network_file_systems={VOL_MOUNT_PATH: output_vol},
+    volumes={VOL_MOUNT_PATH: output_vol},
+    _allow_background_volume_commits=True,
 )
 def finetune(num_train_epochs: int = 1, size_percentage: int = 10):
     from datasets import load_dataset
@@ -58,6 +84,8 @@ def finetune(num_train_epochs: int = 1, size_percentage: int = 10):
         Seq2SeqTrainer,
         Seq2SeqTrainingArguments,
     )
+
+    restarts = track_restarts(stub.restart_tracker_dict)
 
     # Use size percentage to retrieve subset of the dataset to iterate faster
     if size_percentage:
@@ -129,12 +157,11 @@ def finetune(num_train_epochs: int = 1, size_percentage: int = 10):
         predict_with_generate=True,
         learning_rate=3e-5,
         num_train_epochs=num_train_epochs,
-        # Save logs to the mounted volume
-        logging_dir=str(VOL_MOUNT_PATH / "logs"),
         logging_strategy="steps",
         logging_steps=100,
-        evaluation_strategy="epoch",
-        save_strategy="epoch",
+        evaluation_strategy="steps",
+        save_strategy="steps",
+        save_steps=100,
         save_total_limit=2,
         load_best_model_at_end=True,
     )
@@ -147,11 +174,22 @@ def finetune(num_train_epochs: int = 1, size_percentage: int = 10):
         eval_dataset=tokenized_xsum_test,
     )
 
-    trainer.train()
+    try:
+        resume = restarts > 0
+        if resume:
+            print("resuming from checkpoint")
+        trainer.train(resume_from_checkpoint=resume)
+    except KeyboardInterrupt:  # handle possible preemption
+        print("received interrupt; saving state and model")
+        trainer.save_state()
+        trainer.save_model()
+        raise
 
     # Save the trained model and tokenizer to the mounted volume
     model.save_pretrained(str(VOL_MOUNT_PATH / "model"))
     tokenizer.save_pretrained(str(VOL_MOUNT_PATH / "tokenizer"))
+    output_vol.commit()
+    print("✅ done")
 
 
 # ## Monitoring Finetuning with Tensorboard
@@ -159,7 +197,7 @@ def finetune(num_train_epochs: int = 1, size_percentage: int = 10):
 # Tensorboard is an application for visualizing training loss. In this example we
 # serve it as a Modal WSGI app.
 #
-@stub.function(network_file_systems={VOL_MOUNT_PATH: output_vol})
+@stub.function(volumes={VOL_MOUNT_PATH: output_vol})
 @wsgi_app()
 def monitor():
     import tensorboard
@@ -181,7 +219,7 @@ def monitor():
 #
 
 
-@stub.cls(network_file_systems={VOL_MOUNT_PATH: output_vol})
+@stub.cls(volumes={VOL_MOUNT_PATH: output_vol})
 class Summarizer:
     def __enter__(self):
         from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
@@ -206,21 +244,21 @@ class Summarizer:
 @stub.local_entrypoint()
 def main():
     input = """
-    The 14-time major champion, playing in his first full PGA Tour event for almost 18 months, 
-    carded a level-par second round of 72, but missed the cut by four shots after his first-round 76. 
-    World number one Jason Day and US Open champion Dustin Johnson also missed the cut at Torrey Pines in San Diego. 
-    Overnight leader Rose carded a one-under 71 to put him on eight under. Canada's 
-    Adam Hadwin and USA's Brandt Snedeker are tied in second on seven under, while US PGA champion 
-    Jimmy Walker missed the cut as he finished on three over. Woods is playing in just his 
-    second tournament since 15 months out with a back injury. "It's frustrating not being 
-    able to have a chance to win the tournament," said the 41-year-old, who won his last major, 
-    the US Open, at the same course in 2008. "Overall today was a lot better than yesterday. 
-    I hit it better, I putted well again. I hit a lot of beautiful putts that didn't go in, but 
-    I hit it much better today, which was nice." Scotland's Martin Laird and England's Paul Casey 
+    The 14-time major champion, playing in his first full PGA Tour event for almost 18 months,
+    carded a level-par second round of 72, but missed the cut by four shots after his first-round 76.
+    World number one Jason Day and US Open champion Dustin Johnson also missed the cut at Torrey Pines in San Diego.
+    Overnight leader Rose carded a one-under 71 to put him on eight under. Canada's
+    Adam Hadwin and USA's Brandt Snedeker are tied in second on seven under, while US PGA champion
+    Jimmy Walker missed the cut as he finished on three over. Woods is playing in just his
+    second tournament since 15 months out with a back injury. "It's frustrating not being
+    able to have a chance to win the tournament," said the 41-year-old, who won his last major,
+    the US Open, at the same course in 2008. "Overall today was a lot better than yesterday.
+    I hit it better, I putted well again. I hit a lot of beautiful putts that didn't go in, but
+    I hit it much better today, which was nice." Scotland's Martin Laird and England's Paul Casey
     are both on two under, while Ireland's Shane Lowry is on level par.
     """
     model = Summarizer()
-    response = model.generate.call(input)
+    response = model.generate.remote(input)
     print(response)
 
 
@@ -228,14 +266,14 @@ def main():
 # Invoke model finetuning use the provided command below
 #
 # ```bash
-# modal run --detach finetune.py::finetune --num-train-epochs=1 --size-percentage=10
+# modal run --detach flan_t5_finetune.py::finetune --num-train-epochs=1 --size-percentage=10
 # View the tensorboard logs at https://<username>--example-news-summarizer-monitor-dev.modal.run
 # ```
 #
 # Invoke finetuned model inference via local entrypoint
 #
 # ```bash
-# modal run finetune.py
+# modal run flan_t5_finetune.py
 # World number one Tiger Woods missed the cut at the US Open as he failed to qualify for the final round of the event in Los Angeles.
 # ```
 #

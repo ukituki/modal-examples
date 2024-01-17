@@ -3,8 +3,8 @@
 #
 # Based on the work done in https://huggingface.co/blog/fine-tune-whisper.
 
-import pathlib
 import os
+import pathlib
 import sys
 from dataclasses import dataclass
 from typing import Any, Union
@@ -53,8 +53,7 @@ def train(
     import datasets
     import evaluate
     import torch
-    from datasets import load_dataset, DatasetDict
-    from transformers.trainer_utils import get_last_checkpoint, is_main_process
+    from datasets import DatasetDict, load_dataset
     from transformers import (
         AutoConfig,
         AutoFeatureExtractor,
@@ -63,6 +62,7 @@ def train(
         AutoTokenizer,
         Seq2SeqTrainer,
     )
+    from transformers.trainer_utils import get_last_checkpoint, is_main_process
 
     @dataclass
     class DataCollatorSpeechSeq2SeqWithPadding:
@@ -171,13 +171,13 @@ def train(
         "mozilla-foundation/common_voice_11_0",
         "hi",
         split="train+validation",
-        use_auth_token=os.environ["HUGGINGFACE_TOKEN"],
+        use_auth_token=os.environ["HF_TOKEN"],
     )
     raw_datasets["eval"] = load_dataset(
         "mozilla-foundation/common_voice_11_0",
         "hi",
         split="test",
-        use_auth_token=os.environ["HUGGINGFACE_TOKEN"],
+        use_auth_token=os.environ["HF_TOKEN"],
     )
 
     # Most ASR datasets only provide input audio samples (audio) and
@@ -211,7 +211,7 @@ def train(
         else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=os.environ["HUGGINGFACE_TOKEN"],
+        use_auth_token=os.environ["HF_TOKEN"],
     )
 
     config.update(
@@ -504,7 +504,7 @@ def main() -> int:
         ) = parser.parse_args_into_dataclasses(args)
 
         logger.info("Starting training")
-        result = train.call(model_args, data_args, training_args)
+        result = train.remote(model_args, data_args, training_args)
         logger.info(result)
     return 0
 

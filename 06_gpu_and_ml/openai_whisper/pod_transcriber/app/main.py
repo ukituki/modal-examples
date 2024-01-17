@@ -12,9 +12,9 @@ from modal import (
     Dict,
     Image,
     Mount,
+    NetworkFileSystem,
     Period,
     Secret,
-    NetworkFileSystem,
     Stub,
     asgi_app,
 )
@@ -26,21 +26,22 @@ volume = NetworkFileSystem.persisted("dataset-cache-vol")
 
 app_image = (
     Image.debian_slim()
+    .apt_install("git")
     .pip_install(
-        "https://github.com/openai/whisper/archive/9f70a352f9f8630ab3aa0d06af5cb9532bd8c21d.tar.gz",
+        "git+https://github.com/openai/whisper.git",
         "dacite",
         "jiwer",
         "ffmpeg-python",
         "gql[all]~=3.0.0a5",
         "pandas",
         "loguru==0.6.0",
-        "torchaudio==0.12.1",
+        "torchaudio==2.1.0",
     )
     .apt_install("ffmpeg")
     .pip_install("ffmpeg-python")
 )
 search_image = Image.debian_slim().pip_install(
-    "scikit-learn~=0.24.2",
+    "scikit-learn~=1.3.0",
     "tqdm~=4.46.0",
     "numpy~=1.23.3",
     "dacite",
@@ -52,7 +53,7 @@ stub = Stub(
     secrets=[Secret.from_name("podchaser")],
 )
 
-stub.in_progress = Dict()
+stub.in_progress = Dict.new()
 
 
 def utc_now() -> datetime.datetime:
@@ -82,7 +83,7 @@ def populate_podcast_metadata(podcast_id: str):
     with open(metadata_path, "w") as f:
         json.dump(dataclasses.asdict(pod_metadata), f)
 
-    episodes = fetch_episodes.call(
+    episodes = fetch_episodes.remote(
         show_name=pod_metadata.title, podcast_id=podcast_id
     )
 
@@ -368,8 +369,6 @@ def process_episode(podcast_id: str, episode_id: str):
     import dacite
     import whisper
 
-    from modal import container_app
-
     try:
         # pre-download the model to the cache path, because the _download fn is not
         # thread-safe.
@@ -404,13 +403,13 @@ def process_episode(podcast_id: str, episode_id: str):
             )
             logger.info("Skipping transcription.")
         else:
-            transcribe_episode.call(
+            transcribe_episode.remote(
                 audio_filepath=destination_path,
                 result_path=transcription_path,
                 model=model,
             )
     finally:
-        del container_app.in_progress[episode_id]
+        del stub.in_progress[episode_id]
 
     return episode
 
@@ -454,5 +453,5 @@ def fetch_episodes(show_name: str, podcast_id: str, max_episodes=100):
 def search_entrypoint(name: str):
     # To search for a podcast, run:
     # modal run app.main --name "search string"
-    for pod in search_podcast.call(name):
+    for pod in search_podcast.remote(name):
         print(pod)

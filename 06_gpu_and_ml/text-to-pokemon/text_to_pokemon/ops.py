@@ -16,8 +16,8 @@ from .pokemon_naming import (
     fetch_pokemon_names,
     generate_names,
     rnn_image,
-    train_rnn,
     rnn_names_output_path,
+    train_rnn,
 )
 
 
@@ -157,13 +157,13 @@ def main() -> int:
     args = parser.parse_args()
     if args.subcommand == "gen-pokemon-names":
         with stub.run():
-            generate_pokemon_names.call()
+            generate_pokemon_names.remote()
     elif args.subcommand == "extract-colors":
         with stub.run():
-            extract_colors.call()
+            extract_colors.remote()
     elif args.subcommand == "reset-diskcache":
         with stub.run():
-            reset_diskcache.call(dry_run=not args.nodry_run)
+            reset_diskcache.remote(dry_run=not args.nodry_run)
     elif args.subcommand is None:
         parser.print_help(sys.stderr)
     else:

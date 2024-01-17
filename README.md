@@ -25,8 +25,10 @@ Modal and run in our cloud, spawning serverless containers on demand.
 
 ## Examples
 
-* [**`01_getting_started/`**](/01_getting_started) through [**`11_integrations/`**](/11_notebooks/) provide a guided tour through Modal's concepts and capabilities.
-* [**`misc/`**](/misc) contains uncategorized, miscellaneous examples.
+- [**`01_getting_started/`**](01_getting_started) through [**`11_notebooks/`**](11_notebooks) provide a guided tour through Modal's concepts and capabilities.
+- [**`misc/`**](/misc) contains uncategorized, miscellaneous examples.
+
+_These examples are continuously tested for correctness against Python **3.11**._
 
 ## License
 

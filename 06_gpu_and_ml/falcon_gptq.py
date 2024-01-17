@@ -1,8 +1,5 @@
-# ---
-# integration-test: false
-# ---
 # # Run Falcon-40B with AutoGPTQ
-
+#
 # In this example, we run a quantized 4-bit version of Falcon-40B, the first open-source large language
 # model of its size, using HuggingFace's [transformers](https://huggingface.co/docs/transformers/index)
 # library and [AutoGPTQ](https://github.com/PanQiWei/AutoGPTQ).
@@ -11,8 +8,8 @@
 # cold start time on Modal is around 25s.
 #
 # For faster inference at the expense of a slower cold start, check out
-# [Running Falcon-40B with `bitsandbytes` quantization](/docs/guide/ex/falcon_bitsandbytes). You can also
-# run a smaller, 7-billion-parameter model with the [OpenLLaMa example](/docs/guide/ex/openllama).
+# [Running Falcon-40B with `bitsandbytes` quantization](/docs/examples/falcon_bitsandbytes). You can also
+# run a smaller, 7-billion-parameter model with the [OpenLLaMa example](/docs/examples/openllama).
 #
 # ## Setup
 #
@@ -77,8 +74,8 @@ stub = Stub(name="example-falcon-gptq", image=image)
 @stub.cls(gpu=gpu.A100(), timeout=60 * 10, container_idle_timeout=60 * 5)
 class Falcon40BGPTQ:
     def __enter__(self):
-        from transformers import AutoTokenizer
         from auto_gptq import AutoGPTQForCausalLM
+        from transformers import AutoTokenizer
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             IMAGE_MODEL_DIR, use_fast=True
@@ -98,6 +95,7 @@ class Falcon40BGPTQ:
     @method()
     def generate(self, prompt: str):
         from threading import Thread
+
         from transformers import TextIteratorStreamer
 
         inputs = self.tokenizer(prompt, return_tensors="pt")
@@ -135,7 +133,7 @@ prompt_template = (
 def cli():
     question = "What are the main differences between Python and JavaScript programming languages?"
     model = Falcon40BGPTQ()
-    for text in model.generate.call(prompt_template.format(question)):
+    for text in model.generate.remote_gen(prompt_template.format(question)):
         print(text, end="", flush=True)
 
 
@@ -147,14 +145,15 @@ def cli():
 @stub.function(timeout=60 * 10)
 @web_endpoint()
 def get(question: str):
-    from fastapi.responses import StreamingResponse
     from itertools import chain
+
+    from fastapi.responses import StreamingResponse
 
     model = Falcon40BGPTQ()
     return StreamingResponse(
         chain(
             ("Loading model. This usually takes around 20s ...\n\n"),
-            model.generate.call(prompt_template.format(question)),
+            model.generate.remote_gen(prompt_template.format(question)),
         ),
         media_type="text/event-stream",
     )

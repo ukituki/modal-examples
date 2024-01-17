@@ -1,8 +1,5 @@
-# ---
-# integration-test: false
-# ---
 # # Run OpenLLaMa on an A100 GPU
-
+#
 # In this example, we run [OpenLLaMa](https://github.com/openlm-research/open_llama),
 # an open-source large language model, using HuggingFace's [transformers](https://huggingface.co/docs/transformers/index)
 # library.
@@ -68,7 +65,7 @@ stub = Stub(name="example-open-llama", image=image)
 # from the `transformers` library. Refer to the documentation for more parameters and tuning.
 
 
-@stub.cls(gpu=gpu.A100(memory=20))
+@stub.cls(gpu=gpu.A100())
 class OpenLlamaModel:
     def __enter__(self):
         import torch
@@ -128,7 +125,7 @@ def main():
     ]
     model = OpenLlamaModel()
     for input in inputs:
-        model.generate.call(
+        model.generate.remote(
             input,
             top_p=0.75,
             top_k=40,
@@ -144,6 +141,6 @@ def main():
 # you could use OpenLLaMa to perform a more useful downstream task.
 #
 # If you're looking for useful responses out-of-the-box like ChatGPT, you could try Vicuna-13B, which is larger and has been instruction-tuned.
-# However, note that this model is not permissively licensed due to the dataset it was trained on. Refer to our [LLM voice chat](/docs/guide/llm-voice-chat)
+# However, note that this model is not permissively licensed due to the dataset it was trained on. Refer to our [LLM voice chat](/docs/examples/llm-voice-chat)
 # post for how to build a complete voice chat app using Vicuna, or go straight to the [file](https://github.com/modal-labs/quillman/blob/main/src/llm_vicuna.py)
 # if you want to run it by itself.

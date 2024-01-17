@@ -6,7 +6,7 @@
 # Example by [@maxscheel](https://github.com/maxscheel)
 #
 # This example shows the Stable Diffusion 2.1 compiled with [AITemplate](https://github.com/facebookincubator/AITemplate) to run faster on Modal.
-# There is also a [Stable Diffusion CLI example](/docs/guide/ex/stable_diffusion_cli).
+# There is also a [Stable Diffusion CLI example](/docs/examples/stable_diffusion_cli).
 #
 # #### Upsides
 #  - Image generation improves over the CLI example to about 550ms per image generated (A10G, 10 steps, 512x512, png).
@@ -20,6 +20,7 @@
 import io
 import os
 import sys
+
 import modal
 from fastapi import FastAPI, Response
 from pydantic import BaseModel
@@ -57,7 +58,7 @@ def download_and_compile():
         MODEL_ID,
         revision="fp16",
         torch_dtype=torch.float16,
-        use_auth_token=os.environ["HUGGINGFACE_TOKEN"],
+        use_auth_token=os.environ["HF_TOKEN"],
     ).save_pretrained(MODEL_PATH, safe_serialization=True)
 
     diffusers.EulerDiscreteScheduler.from_pretrained(
@@ -170,8 +171,8 @@ def _inference(
 # which include all required drivers.
 
 image = (
-    modal.Image.from_dockerhub(
-        "nvidia/cuda:12.1.1-devel-ubuntu22.04",
+    modal.Image.from_registry(
+        "nvidia/cuda:12.2.0-devel-ubuntu22.04",
         setup_dockerfile_commands=[
             "RUN apt-get update && apt-get install -y git python3-pip",
             "RUN ln -s /usr/bin/python3 /usr/bin/python",
@@ -265,7 +266,7 @@ def inference_asgi():
 #      --header 'Content-Type: application/json' \
 #      --data-raw '{
 #         "prompt": "photo of a wolf in the snow, blue eyes, highly detailed, 8k, 200mm canon lens, shallow depth of field",
-#         "num_inference_steps": 10
+#         "num_inference_steps": 10,
 #         "guidance_scale": 10.0,
 #         "negative_prompt": "deformed, extra legs, no tail",
 #         "format": "webp"

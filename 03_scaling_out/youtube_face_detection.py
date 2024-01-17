@@ -1,5 +1,4 @@
 # ---
-# deploy: true
 # output-directory: "/tmp"
 # runtimes: ["runc", "gvisor"]
 # ---
@@ -45,22 +44,21 @@ image = (
         f"wget https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/{FACE_CASCADE_FN} -P /root"
     )
     .pip_install(
-        # Uses pytube fix from here: https://github.com/pytube/pytube/pull/1575
-        "pytube @ git+https://github.com/felipeucelli/pytube@03d72641191ced9d92f31f94f38cfb18c76cfb05",
+        "pytube @ git+https://github.com/modal-labs/pytube",
         "opencv-python~=4.7.0.72",
         "moviepy~=1.0.3",
     )
 )
 stub = modal.Stub("example-youtube-face-detection", image=image)
 
-if stub.is_inside():
+with image.imports():
     import cv2
     import moviepy.editor
     import pytube
 
-# For temporary storage of movie clips, we use a "shared volume"
+# For temporary storage and sharing of downloaded movie clips, we use a network file system.
 
-stub.sv = modal.NetworkFileSystem.new()
+net_file_system = modal.NetworkFileSystem.new()
 
 # ### Face detection function
 #
@@ -69,12 +67,12 @@ stub.sv = modal.NetworkFileSystem.new()
 # * A filename to the source clip
 # * A time slice denoted by start and a stop in seconds
 #
-# The function extracts the subclip from the movie file (which is stored on the shared volume),
+# The function extracts the subclip from the movie file (which is stored on the network file system),
 # runs face detection on every frame in its slice,
 # and stores the resulting video back to the shared storage.
 
 
-@stub.function(network_file_systems={"/clips": stub.sv}, timeout=600)
+@stub.function(network_file_systems={"/clips": net_file_system}, timeout=600)
 def detect_faces(fn, start, stop):
     # Extract the subclip from the video
     clip = moviepy.editor.VideoFileClip(fn).subclip(start, stop)
@@ -107,7 +105,7 @@ def detect_faces(fn, start, stop):
 # 3. Stitch the results back into a new video
 
 
-@stub.function(network_file_systems={"/clips": stub.sv}, retries=1)
+@stub.function(network_file_systems={"/clips": net_file_system}, retries=1)
 def process_video(url):
     print(f"Downloading video from '{url}'")
     yt = pytube.YouTube(url)
@@ -147,7 +145,7 @@ def process_video(url):
 
 @stub.local_entrypoint()
 def main(youtube_url: str = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"):
-    fn, movie_data = process_video.call(youtube_url)
+    fn, movie_data = process_video.remote(youtube_url)
     abs_fn = os.path.join(OUTPUT_DIR, fn)
     print(f"writing results to {abs_fn}")
     with open(abs_fn, "wb") as f:

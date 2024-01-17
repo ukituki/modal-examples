@@ -5,10 +5,10 @@ import modal
 
 stub = modal.Stub("example-gpt2")
 
-# volume = modal.NetworkFileSystem().persist("gpt2")
 CACHE_PATH = "/root/model_cache"
 
 
+# Run as a build function to save the model files into the custom `modal.Image`.
 def download_model():
     from transformers import pipeline
 
@@ -34,5 +34,5 @@ def generate_text(prompt: str):
 
 @stub.local_entrypoint()
 def main(prompt: str = ""):
-    generation = generate_text.call(prompt=prompt or "Show me the meaning of")
+    generation = generate_text.remote(prompt=prompt or "Show me the meaning of")
     print(generation)

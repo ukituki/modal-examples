@@ -1,9 +1,8 @@
 # ---
-# integration-test: false
 # args: ["--prompt", "How do planes work?"]
 # ---
 # # Run Falcon-40B with bitsandbytes
-
+#
 # In this example, we download the full-precision weights of the Falcon-40B LLM but load it in 4-bit using
 # Tim Dettmer's [`bitsandbytes`](https://github.com/TimDettmers/bitsandbytes) library. This enables it to fit
 # into a single GPU (A100 40GB).
@@ -12,7 +11,7 @@
 # to the sheer size of the model, the cold start time on Modal is around 2 minutes.
 #
 # For faster cold start at the expense of inference speed, check out
-# [Running Falcon-40B with AutoGPTQ](/docs/guide/ex/falcon_gptq).
+# [Running Falcon-40B with AutoGPTQ](/docs/examples/falcon_gptq).
 #
 # ## Setup
 #
@@ -82,9 +81,9 @@ class Falcon40B_4bit:
     def __enter__(self):
         import torch
         from transformers import (
+            AutoModelForCausalLM,
             AutoTokenizer,
             BitsAndBytesConfig,
-            AutoModelForCausalLM,
         )
 
         model_name = "tiiuae/falcon-40b-instruct"
@@ -119,8 +118,8 @@ class Falcon40B_4bit:
     @method()
     def generate(self, prompt: str):
         from threading import Thread
-        from transformers import TextIteratorStreamer
-        from transformers import GenerationConfig
+
+        from transformers import GenerationConfig, TextIteratorStreamer
 
         tokenized = self.tokenizer(prompt, return_tensors="pt")
         input_ids = tokenized.input_ids
@@ -173,7 +172,7 @@ def cli(prompt: str = None):
         or "What are the main differences between Python and JavaScript programming languages?"
     )
     model = Falcon40B_4bit()
-    for text in model.generate.call(prompt_template.format(question)):
+    for text in model.generate.remote_gen(prompt_template.format(question)):
         print(text, end="", flush=True)
 
 
@@ -185,14 +184,15 @@ def cli(prompt: str = None):
 @stub.function(timeout=60 * 10)
 @web_endpoint()
 def get(question: str):
-    from fastapi.responses import StreamingResponse
     from itertools import chain
+
+    from fastapi.responses import StreamingResponse
 
     model = Falcon40B_4bit()
     return StreamingResponse(
         chain(
             ("Loading model (100GB). This usually takes around 110s ...\n\n"),
-            model.generate.call(prompt_template.format(question)),
+            model.generate.remote(prompt_template.format(question)),
         ),
         media_type="text/event-stream",
     )

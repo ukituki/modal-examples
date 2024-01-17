@@ -1,10 +1,11 @@
 import json
 import re
 import warnings
-from pydantic import BaseModel
 from enum import Enum
 from pathlib import Path
 from typing import Iterator, Optional
+
+from pydantic import BaseModel
 
 DEFAULT_DIRECTORY = Path(__file__).parent.parent
 
@@ -36,6 +37,7 @@ class Example(BaseModel):
 
 _RE_NEWLINE = re.compile(r"\r?\n")
 _RE_FRONTMATTER = re.compile(r"^---$", re.MULTILINE)
+_RE_CODEBLOCK = re.compile(r"\s*```[^`]+```\s*", re.MULTILINE)
 
 
 def render_example_md(example: Example) -> str:
@@ -54,7 +56,8 @@ def render_example_md(example: Example) -> str:
                 code = []
             markdown.append(line[2:])
         else:
-            markdown.append("")
+            if markdown and markdown[-1]:
+                markdown.append("")
             if code or line:
                 code.append(line)
 
@@ -65,7 +68,17 @@ def render_example_md(example: Example) -> str:
     if _RE_FRONTMATTER.match(text):
         # Strip out frontmatter from text.
         if match := _RE_FRONTMATTER.search(text, 4):
-            text = text[match.end() :]
+            text = text[match.end() + 1 :]
+
+    if match := _RE_CODEBLOCK.match(text):
+        filename = Path(example.filename).name
+        if match.end() == len(text):
+            # Special case: The entire page is a single big code block.
+            text = f"""# Example ({filename})
+
+This is the source code for **{example.module}**.
+{text}"""
+
     return text
 
 

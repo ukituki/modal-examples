@@ -18,12 +18,11 @@ stub = modal.Stub(
     .pip_install("scikit-learn"),
 )
 
-# The `stub.is_inside()` lets us conditionally run code in the global scope.
+# The `stub.image.imports()` lets us conditionally import in the global scope.
 # This is needed because we might not have sklearn and numpy installed locally,
-# but we know they are installed inside the custom image. `stub.is_inside()`
-# will return `False` when we run this locally, but `True` when it runs in the cloud.
+# but we know they are installed inside the custom image.
 
-if stub.is_inside():
+with stub.image.imports():
     import numpy as np
     from sklearn import datasets, linear_model
 
@@ -50,6 +49,6 @@ def fit():
 if __name__ == "__main__":
     t0 = time.time()
     with stub.run():
-        t = fit.call()
+        t = fit.remote()
         print("Function time spent:", t)
     print("Full time spent:", time.time() - t0)
