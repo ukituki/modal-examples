@@ -41,13 +41,12 @@ import modal
 
 image = (  # build up a Modal Image to run ComfyUI, step by step
     modal.Image.debian_slim(  # start from basic Linux with Python
-        python_version="3.11"
-    )
-    .apt_install("git")  # install git to clone ComfyUI
+        python_version="3.11")
+    .apt_install("git", "libgl1-mesa-glx", "libglib2.0-0")  # install git, OpenGL, and GLib libraries
     .pip_install("fastapi[standard]==0.115.4")  # install web dependencies
     .pip_install("comfy-cli==1.3.8")  # install comfy-cli
     .run_commands(  # use comfy-cli to install ComfyUI and its dependencies
-        "comfy --skip-prompt install --fast-deps --nvidia --version 0.3.10"
+        "comfy --skip-prompt install --fast-deps --nvidia --version 0.3.17"
     )
 )
 
@@ -61,6 +60,8 @@ image = (
     image.run_commands(  # download a custom node
         "comfy node install --fast-deps was-node-suite-comfyui@1.0.2"
     )
+    .run_commands("comfy node registry-install comfyui_pulid_flux_ll")
+    .run_commands("comfy node registry-install comfyui_patches_ll")
     # Add .run_commands(...) calls for any other custom nodes you want to download
 )
 
@@ -88,19 +89,91 @@ image = image.add_local_dir(
 def hf_download():
     from huggingface_hub import hf_hub_download
 
-    flux_model = hf_hub_download(
+    # Create target directories if they don't exist
+    subprocess.run("mkdir -p /root/comfy/ComfyUI/models/checkpoints", shell=True, check=True)
+    subprocess.run("mkdir -p /root/comfy/ComfyUI/models/pulid", shell=True, check=True)
+    subprocess.run("mkdir -p /root/comfy/ComfyUI/models/clip", shell=True, check=True)
+    subprocess.run("mkdir -p /root/comfy/ComfyUI/models/unet", shell=True, check=True) # For Flux Dev model
+    # Directory for insightface models like AntelopeV2
+    antelope_dir = "/root/comfy/ComfyUI/models/insightface/models/antelopev2"
+    subprocess.run(f"mkdir -p {antelope_dir}", shell=True, check=True)
+
+    # --- Flux Schnell Model ---
+    flux_model_path = hf_hub_download(
         repo_id="Comfy-Org/flux1-schnell",
         filename="flux1-schnell-fp8.safetensors",
         cache_dir="/cache",
     )
-
-    # symlink the model to the right ComfyUI directory
     subprocess.run(
-        f"ln -s {flux_model} /root/comfy/ComfyUI/models/checkpoints/flux1-schnell-fp8.safetensors",
+        f"ln -sf {flux_model_path} /root/comfy/ComfyUI/models/checkpoints/flux1-schnell-fp8.safetensors",
         shell=True,
         check=True,
     )
 
+    # --- Flux Dev Model (different UNet structure) ---
+    flux_dev_model_path = hf_hub_download(
+        repo_id="Kijai/flux-fp8",
+        filename="flux1-dev-fp8.safetensors",
+        cache_dir="/cache",
+    )
+    subprocess.run(
+        f"ln -sf {flux_dev_model_path} /root/comfy/ComfyUI/models/unet/flux1-dev-fp8.safetensors",
+        shell=True,
+        check=True,
+    )
+
+    # --- PuLID Models ---
+    # Main PuLID-Flux model
+    pulid_model_path = hf_hub_download(
+        repo_id="guozinan/PuLID",
+        filename="pulid_flux_v0.9.1.safetensors",
+        cache_dir="/cache",
+    )
+    subprocess.run(
+        f"ln -sf {pulid_model_path} /root/comfy/ComfyUI/models/pulid/pulid_flux_v0.9.1.safetensors",
+        shell=True,
+        check=True,
+    )
+
+    # EVA-CLIP model (required by PuLID-Flux)
+    # See: https://github.com/lldacing/ComfyUI_PuLID_Flux_ll?tab=readme-ov-file#pulid-models
+    eva_clip_model_path = hf_hub_download(
+        repo_id="QuanSun/EVA-CLIP",
+        filename="EVA02_CLIP_L_336_psz14_s6B.pt",
+        cache_dir="/cache",
+    )
+    subprocess.run(
+        f"ln -sf {eva_clip_model_path} /root/comfy/ComfyUI/models/clip/EVA02_CLIP_L_336_psz14_s6B.pt",
+        shell=True,
+        check=True,
+    )
+
+    # --- AntelopeV2 Models (required by PuLID-Flux) ---
+    # From: https://huggingface.co/MonsterMMORPG/tools/tree/main
+    # According to PuLID docs: https://github.com/lldacing/ComfyUI_PuLID_Flux_ll?tab=readme-ov-file#pulid-models
+    antelope_repo = "MonsterMMORPG/tools"
+    antelope_files = [
+        "1k3d68.onnx",
+        "2d106det.onnx",
+        "genderage.onnx",
+        "glintr100.onnx",
+        "scrfd_10g_bnkps.onnx",
+    ]
+    for filename in antelope_files:
+        model_path = hf_hub_download(
+            repo_id=antelope_repo,
+            filename=filename,
+            cache_dir="/cache",
+        )
+        subprocess.run(
+            f"ln -sf {model_path} {antelope_dir}/{filename}",
+            shell=True,
+            check=True,
+        )
+
+    # Note: Facexlib models are also required by PuLID-Flux,
+    # but they are automatically downloaded by the custom node when first needed.
+    # Path: ComfyUI/models/facexlib/
 
 vol = modal.Volume.from_name("hf-hub-cache", create_if_missing=True)
 
