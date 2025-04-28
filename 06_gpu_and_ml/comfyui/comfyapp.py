@@ -62,6 +62,7 @@ image = (
     )
     .run_commands("comfy node registry-install comfyui_pulid_flux_ll")
     .run_commands("comfy node registry-install comfyui_patches_ll")
+    .run_commands("comfy node registry-install bjornulf_custom_nodes")
     # Add .run_commands(...) calls for any other custom nodes you want to download
 )
 
